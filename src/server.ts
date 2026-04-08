@@ -4,14 +4,33 @@ import connectAuth from "./routes/auth-routes/auth.js";
 import connectUser from "./routes/user-routes/user.js";
 import { fastifyConnectPlugin } from "@connectrpc/connect-fastify";
 import fastifyCors from "@fastify/cors";
+import { authInterceptor } from "./middlewares/connect-auth.interceptor.js";
+import { z } from "zod";
 
+// check if all env values are provided
+const envSchema = z.object({
+    JWT_SECRET: z.string().min(1),
+    DATABASE_URL: z.string().min(1),
+});
+
+const env = envSchema.safeParse(process.env);
+
+if (!env.success) {
+    console.error("Invalid/missing env variables:", env.error.format());
+    process.exit(1);
+}
+
+// Server
 const fastify = Fastify({logger: true, http2: true})
 
-fastify.register(fastifyConnectPlugin, { 
-    routes: connectAuth
-})
+const routes = (router: any) => {
+    connectAuth(router)
+    connectUser(router)
+}
+
 fastify.register(fastifyConnectPlugin, {
-    routes: connectUser
+    routes: routes,
+    interceptors: [authInterceptor]
 })
 
 fastify.register(fastifyCors, {
@@ -19,7 +38,6 @@ fastify.register(fastifyCors, {
     methods: ["GET", "POST", "PUT", "DELETE"]
 })
 fastify.register(fastifyJwt, { secret: "someKey" })
-
 
 fastify.get("/", function(req, rep) {
     rep.send("Server is working")
